@@ -278,6 +278,14 @@ fi
 [[ -n "${KOTASYNC}" && -x "${KOTASYNC}" ]] ||
     err "no kotasync binary found. Build it with: make -C base/kotasync"
 
+# An AppImage self-mounts through FUSE 2, which plenty of distributions no
+# longer ship, so unpack it instead — the same way koreader-base runs
+# mkappimage. The runtime eats this argument; kotasync never sees it.
+kotasync=("${KOTASYNC}")
+if [[ "${KOTASYNC}" == *.AppImage ]]; then
+    kotasync+=(--appimage-extract-and-run)
+fi
+
 # Mirror how the Makefile names a release: git describe, plus the commit date
 # when HEAD is not exactly a tag. The device parses this to decide whether the
 # package is newer than what it is running, so it has to carry a vYYYY.MM token.
@@ -324,7 +332,7 @@ else
 fi
 
 info "generating ${manifest}"
-"${KOTASYNC}" make --manifest koreader/ota/package.index "${reorder_opts[@]}" \
+"${kotasync[@]}" make --manifest koreader/ota/package.index "${reorder_opts[@]}" \
     "${package}" "${manifest}"
 
 if ((dry_run)); then
