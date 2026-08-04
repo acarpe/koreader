@@ -393,6 +393,11 @@ You can find other KOReader users on MobileRead forums
 
 quickstart_guide = table.concat(quickstart_guide, "\n")
 
+-- The inline icon paths above are part of translatable strings, so they still name the
+-- icon set that was current when those strings were written. Rewrite them to the set we
+-- ship now, so the guide matches the UI without invalidating every translation.
+quickstart_guide = quickstart_guide:gsub("resources/icons/mdlight/", "resources/icons/lucide/")
+
 --[[-- Returns `true` if shown, `false` if the quickstart guide hasn't been
 shown yet or if display is forced through a higher version number than when
 it was first shown.
