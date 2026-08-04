@@ -1,7 +1,7 @@
 --- A subclass of ImageWidget to show icons, so its fields can be used here
 -- @usage local IconWidget = require("ui/widget/iconwidget")
 -- local icon_widget = IconWidget:new{
---     icon = "check", -- Which corresponds to resources/icons/mdlight/check.svg
+--     icon = "check", -- Which corresponds to resources/icons/lucide/check.svg
 --     dim = true,
 --     alpha = true
 -- }
@@ -22,7 +22,10 @@ local user_icons_dir = DataStorage:getDataDir() .. "/icons"
 if lfs.attributes(user_icons_dir, "mode") == "directory" then
     table.insert(ICONS_DIRS, user_icons_dir)
 end
--- Default icons (material design light)
+-- Default icons (Lucide)
+table.insert(ICONS_DIRS, "resources/icons/lucide")
+-- Previous icon set (material design light), kept as a fallback so that an icon
+-- missing from the set above degrades to the old art instead of icon-not-found
 table.insert(ICONS_DIRS, "resources/icons/mdlight")
 -- Fallback directories
 table.insert(ICONS_DIRS, "resources/icons")
