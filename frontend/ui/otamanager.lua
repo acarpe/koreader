@@ -14,6 +14,7 @@ local UIManager = require("ui/uimanager")
 local Trapper = require("ui/trapper")
 local Version = require("version")
 local logger = require("logger")
+local url = require("socket.url")
 local util = require("util")
 local _ = require("gettext")
 local C_ = _.pgettext
@@ -49,6 +50,26 @@ local ota_channels = {
     nightly = _("Development"),
 }
 
+-- Turn what someone would actually type ("192.168.1.10:8080/koreader") into something
+-- checkUpdate can concatenate a filename onto. Returns nil for a blank address (i.e.,
+-- "go back to the default"), or nil plus a message if it can't make sense of it.
+function OTAManager:normalizeServerUrl(input)
+    local server = input:gsub("^%s+", ""):gsub("%s+$", "")
+    if server == "" then return end
+    if not server:match("^%a[%w+.-]*://") then
+        server = "http://" .. server
+    end
+    local parsed = url.parse(server)
+    if not parsed or not parsed.scheme or not parsed.host or parsed.host == "" then
+        return nil, _("Invalid server address")
+    end
+    if parsed.scheme ~= "http" and parsed.scheme ~= "https" then
+        return nil, _("Only http:// and https:// addresses are supported.")
+    end
+    -- NOTE: the update filename is appended as-is, so the trailing / is mandatory.
+    return (server:gsub("/*$", "")) .. "/"
+end
+
 function OTAManager:getOTAType()
     local platform, kind = Device:otaModel()
     if not platform then return "none" end
@@ -56,12 +77,28 @@ function OTAManager:getOTAType()
 end
 
 function OTAManager:getOTAServer()
-    return G_reader_settings:readSetting("ota_server") or self.ota_servers[1]
+    return G_reader_settings:readSetting("ota_server")
+        or G_defaults:readSetting("OTA_SERVER")
+        or self.ota_servers[1]
 end
 
+-- Pass nil to fall back to OTA_SERVER, or to the first mirror if that isn't set either.
 function OTAManager:setOTAServer(server)
     logger.dbg("Set OTA server:", server)
-    G_reader_settings:saveSetting("ota_server", server)
+    if server then
+        G_reader_settings:saveSetting("ota_server", server)
+    else
+        G_reader_settings:delSetting("ota_server")
+    end
+end
+
+-- Whether we're pointed at something else than one of the mirrors we ship.
+function OTAManager:isCustomServer()
+    local current = self:getOTAServer()
+    for _, server in ipairs(self.ota_servers) do
+        if current == server then return false end
+    end
+    return true
 end
 
 function OTAManager:getOTAChannel()
@@ -231,7 +268,7 @@ function OTAManager:fetchAndProcessUpdate()
     elseif not ota_version then
         logger.warn("OTA check failed:", local_version)
         UIManager:show(InfoMessage:new{
-            text = _("Unable to contact OTA server. Try again later, or try another mirror."),
+            text = _("Unable to contact the update server. Try again later, or pick another server."),
         })
         return
     end
@@ -408,6 +445,57 @@ function OTAManager:genServerList()
         }
         table.insert(servers, server_item)
     end
+    table.insert(servers, {
+        text_func = function()
+            if self:isCustomServer() then
+                return T(_("Custom server: %1"), BD.url(self:getOTAServer()))
+            end
+            return _("Custom server")
+        end,
+        checked_func = function() return self:isCustomServer() end,
+        keep_menu_open = true,
+        callback = function(touchmenu_instance)
+            local InputDialog = require("ui/widget/inputdialog")
+            local server_dialog
+            server_dialog = InputDialog:new{
+                title = _("Custom update server"),
+                description = _([[
+Address of a server hosting KOReader update packages, for example:
+
+http://192.168.1.10:8080/koreader/
+
+Leave empty to use the default server.]]),
+                input = self:isCustomServer() and self:getOTAServer() or "http://",
+                buttons = {
+                    {
+                        {
+                            text = _("Cancel"),
+                            id = "close",
+                            callback = function()
+                                UIManager:close(server_dialog)
+                            end,
+                        },
+                        {
+                            text = _("Save"),
+                            is_enter_default = true,
+                            callback = function()
+                                local server, err = self:normalizeServerUrl(server_dialog:getInputText())
+                                if err then
+                                    UIManager:show(InfoMessage:new{ text = err })
+                                    return
+                                end
+                                self:setOTAServer(server)
+                                UIManager:close(server_dialog)
+                                touchmenu_instance:updateItems()
+                            end,
+                        },
+                    },
+                },
+            }
+            UIManager:show(server_dialog)
+            server_dialog:onShowKeyboard()
+        end,
+    })
     return servers
 end
 

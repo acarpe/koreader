@@ -192,6 +192,11 @@ KOBO_SYNC_BRIGHTNESS_WITH_NICKEL = true,  -- Update Nickel's config to match our
 -- proxy authentication is not supported yet.
 NETWORK_PROXY = nil,
 
+-- Custom OTA update server, e.g. "http://192.168.1.10:8080/koreader/"
+-- Takes precedence over the built-in mirror list, and is itself overridden by the
+-- server picked in the update menu. Must end with a /
+OTA_SERVER = nil,
+
 -- Experimental features
 -- Use turbo library to handle async HTTP request
 DUSE_TURBO_LIB = false,
