@@ -34,7 +34,7 @@ Targets: `emulator` (default), `android-{arm,arm64,x86,x86_64}`, `cervantes`,
 ```sh
 ./kodev test                      # everything (front + base)
 ./kodev test front                # frontend specs only
-./kodev test front readerbookmark_spec.lua    # single spec
+./kodev test front readerbookmark # single spec (name = filename minus `_spec.lua`)
 ./kodev test base util            # single base test
 ./kodev test -l                   # list available tests
 ./kodev cov                       # coverage summary (-f for line-level report)
