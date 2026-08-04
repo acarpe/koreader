@@ -45,7 +45,7 @@ function SetDefaultsWidget:init()
     end
 
     -- Slight bit of nastiness, because we have a couple of (string) defaults whose value is `nil` (#11679)...
-    local nil_defaults = { "NETWORK_PROXY", "STARDICT_DATA_DIR" }
+    local nil_defaults = { "NETWORK_PROXY", "OTA_SERVER", "STARDICT_DATA_DIR" }
     for i, v in ipairs(nil_defaults) do
         self.state[v] = {
             idx = 1,
