@@ -317,10 +317,14 @@ fi
 # Reordering the new archive against the currently published manifest keeps
 # unchanged files in their old block order, which turns the device's download
 # into fewer, larger range requests.
-previous="$(mktemp -t koreader-ota-previous.XXXXXX)"
-declare -r previous
+# kotasync tells a manifest from an archive by its extension alone
+# (TarXz:reorder in base/ffi/kotasync.lua), so the local copy has to keep the
+# .kotasync suffix; a bare mktemp name gets read as xz and fails with
+# LZMA_FORMAT_ERROR. Hence a directory rather than a file.
+tmpdir="$(mktemp -d -t koreader-ota.XXXXXX)"
+declare -r tmpdir previous="${tmpdir}/previous.kotasync"
 # shellcheck disable=SC2064
-trap "rm -f -- '${previous}'" EXIT
+trap "rm -rf -- '${tmpdir}'" EXIT
 
 reorder_opts=()
 info "looking for a published manifest to reorder against"
