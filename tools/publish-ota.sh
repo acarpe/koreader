@@ -261,6 +261,30 @@ dest_rm() {
 
 cd -- "${REPO_DIR}" || err "cannot enter ${REPO_DIR}"
 
+# Nothing downstream would catch a stale submodule. The Makefile only runs
+# fetchthirdparty when base/Makefile is missing altogether, so a checkout left
+# behind by a plain `git pull` here still builds — against the base, crengine and
+# kotasync of whatever commit the submodules were initialized at. The version
+# below comes from this repo alone, so the package would announce itself as newer
+# than the native half it actually carries. Recursive, because base pins crengine
+# the same way this repo pins base.
+info "checking submodules"
+drift=()
+while IFS= read -r line; do
+    # A clean entry is prefixed with a space; -, + and U mean uninitialized,
+    # moved and conflicted.
+    case "${line}" in
+        [-+U]*) drift+=("${line}") ;;
+    esac
+done < <(git submodule status --recursive)
+if [[ "${#drift[@]}" -gt 0 ]]; then
+    printf '    %s\n' "${drift[@]}" >&2
+    err "$(printf '%s\n%s' \
+        'the submodules above are not at the commit this repo records.' \
+        'Run ./kodev fetch-thirdparty, or commit the new pointers, then publish again.')"
+fi
+printf '    at the recorded commits\n'
+
 # The kotasync binary is a Linux AppImage built out of koreader-base; it is what
 # turns a .tar.xz into the manifest the device polls.
 if [[ -z "${KOTASYNC}" ]]; then
