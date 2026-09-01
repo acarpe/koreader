@@ -496,10 +496,13 @@ function ReaderUI:init()
 
     local md5 = self.doc_settings:readSetting("partial_md5_checksum")
     if md5 == nil then
+        -- self.md5_checksum is passed in by showReader when it had to compute it anyway (new book).
+        -- A sidecar may well exist without it (e.g. a status or rating set from the file browser
+        -- creates one), so always fall back to computing it: hashing is cheap next to opening a
+        -- document, and a wrong value silently merges this book's identity with another book's.
         md5 = self.md5_checksum or util.partialMD5(file)
         self.doc_settings:saveSetting("partial_md5_checksum", md5)
     end
-    self.md5_checksum = nil
 
     local summary = self.doc_settings:readSetting("summary", {})
     if BookList.getBookStatusString(summary.status) == nil then
@@ -630,7 +633,7 @@ function ReaderUI:showReader(file, provider, seamless, is_provider_forced, after
         provider = self:extendProvider(file, provider, is_provider_forced)
     end
     if provider and provider.provider then
-        local function do_show(settings_file)
+        local function do_show(settings_file, md5_checksum, arc_settings_data)
             if settings_file then
                 os.remove(settings_file)
                 os.remove(settings_file .. ".old")
@@ -638,13 +641,17 @@ function ReaderUI:showReader(file, provider, seamless, is_provider_forced, after
             self.after_open_callback = after_open_callback
             -- We can now signal the existing ReaderUI/FileManager instances that it's time to go bye-bye...
             UIManager:broadcastEvent(Event:new("ShowingReader"))
-            self:showReaderCoroutine(file, provider, seamless)
+            self:showReaderCoroutine(file, provider, seamless, md5_checksum, arc_settings_data)
         end
-        if BookList.hasBookBeenOpened(file) then
+        -- "New book" here means "has no sidecar file", which is what decides whether the metadata
+        -- archive may hold something for it. Deliberately not BookList.hasBookBeenOpened(), which
+        -- answers from book_info_cache, whose been_opened flag is force-set by any book-info
+        -- property write, with no sidecar required.
+        if DocSettings:hasSidecarFile(file) then
             do_show()
         else -- new book
-            self.md5_checksum = util.partialMD5(file)
-            local arc_settings_file = DocSettings.getSettingsArcFile(self.md5_checksum, true) -- check if exists
+            local md5_checksum = util.partialMD5(file)
+            local arc_settings_file = DocSettings.getSettingsArcFile(md5_checksum, true) -- check if exists
             if arc_settings_file then
                 UIManager:show(ConfirmBox:new{
                     text =
@@ -653,16 +660,16 @@ Would you like to restore its metadata from the archive?
 Discarded metadata will be removed from the archive.]],
                     ok_text = _("Restore"),
                     ok_callback = function()
-                        self.arc_settings_data = DocSettings.openSettingsFile(arc_settings_file).data
-                        do_show(arc_settings_file)
+                        local arc_settings_data = DocSettings.openSettingsFile(arc_settings_file).data
+                        do_show(arc_settings_file, md5_checksum, arc_settings_data)
                     end,
                     cancel_text = _("Discard"),
                     cancel_callback = function()
-                        do_show(arc_settings_file)
+                        do_show(arc_settings_file, md5_checksum)
                     end,
                 })
             else -- no arc settings file
-                do_show()
+                do_show(nil, md5_checksum)
             end
         end
     else
@@ -708,7 +715,7 @@ function ReaderUI:extendProvider(file, provider, is_provider_forced)
     return provider
 end
 
-function ReaderUI:showReaderCoroutine(file, provider, seamless)
+function ReaderUI:showReaderCoroutine(file, provider, seamless, md5_checksum, arc_settings_data)
     UIManager:show(InfoMessage:new{
         text = T(_("Opening file '%1'."), BD.filepath(filemanagerutil.abbreviate(file))),
         timeout = 0.0,
@@ -719,7 +726,7 @@ function ReaderUI:showReaderCoroutine(file, provider, seamless)
     UIManager:nextTick(function()
         logger.dbg("creating coroutine for showing reader")
         local co = coroutine.create(function()
-            self:doShowReader(file, provider, seamless)
+            self:doShowReader(file, provider, seamless, md5_checksum, arc_settings_data)
         end)
         local ok, err = coroutine.resume(co)
         if err ~= nil or ok == false then
@@ -736,7 +743,11 @@ function ReaderUI:showReaderCoroutine(file, provider, seamless)
     end)
 end
 
-function ReaderUI:doShowReader(file, provider, seamless)
+--- @note: md5_checksum and arc_settings_data are per-open values computed by showReader.
+---        They are passed down explicitly rather than parked on the ReaderUI table, which
+---        outlives every instance: init() runs on an instance, so clearing them there would
+---        only fail to shadow a class-level field, and the next book would inherit them.
+function ReaderUI:doShowReader(file, provider, seamless, md5_checksum, arc_settings_data)
     if seamless then
         UIManager:avoidFlashOnNextRepaint()
     end
@@ -772,6 +783,8 @@ function ReaderUI:doShowReader(file, provider, seamless)
         document = document,
         reloading = self.reloading,
         after_open_callback = self.after_open_callback,
+        md5_checksum = md5_checksum,
+        arc_settings_data = arc_settings_data,
     }
     self.reloading = nil
     self.after_open_callback = nil
