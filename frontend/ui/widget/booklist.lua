@@ -339,6 +339,10 @@ function BookList.getBookInfo(file)
     return BookList.book_info_cache[file]
 end
 
+--- Answers from book_info_cache, falling back to the filesystem only on a cache miss.
+--- Note that setBookInfoCacheProperty() force-sets been_opened on any property write, so a true
+--- here does not guarantee a sidecar file exists. Callers that need that fact (rather than "has
+--- this book got reading state we know of") must use DocSettings:hasSidecarFile(file) instead.
 function BookList.hasBookBeenOpened(file)
     local book_info = BookList.book_info_cache[file]
     local been_opened = book_info and book_info.been_opened
